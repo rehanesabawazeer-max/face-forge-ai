@@ -79,6 +79,7 @@ function App() {
   const [caseNotes, setCaseNotes] = useState<string>("");
   const [todayLabel, setTodayLabel] = useState<string>("");
   const [cases, setCases] = useState<CaseRecord[]>([]);
+  const [sessionImages, setSessionImages] = useState<{ id: string; url: string; mode: string; ts: number }[]>([]);
   const [saving, setSaving] = useState(false);
   const debounceRef = useRef<number | null>(null);
 
