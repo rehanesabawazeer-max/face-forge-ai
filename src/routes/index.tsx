@@ -266,7 +266,7 @@ function App() {
               <span className="h-2 w-2 rounded-full bg-emerald-400 pulse-dot" />
               SECURE LINK
             </span>
-            <span>CASE #{caseNumber || "------"}</span>
+            <span suppressHydrationWarning>CASE #{caseNumber || "------"}</span>
             <span suppressHydrationWarning>{todayLabel}</span>
           </div>
         </div>
