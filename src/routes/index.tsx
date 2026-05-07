@@ -141,7 +141,7 @@ function App() {
     [features, mode, style],
   );
 
-  // Debounced auto-regenerate when features change (only if we already have an image)
+  // Debounced auto-regenerate when feature attributes change (skip mode/style — those are view toggles only)
   useEffect(() => {
     if (!image) return;
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
@@ -152,7 +152,7 @@ function App() {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [features, mode, style]);
+  }, [features]);
 
   const handleEnhance = async () => {
     if (!enhancePrompt.trim()) return;
