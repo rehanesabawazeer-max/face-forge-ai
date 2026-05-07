@@ -14,7 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      forensic_cases: {
+        Row: {
+          case_number: string
+          created_at: string
+          features: Json | null
+          id: string
+          image_path: string
+          image_url: string
+          label: string | null
+          mode: string | null
+          notes: string | null
+        }
+        Insert: {
+          case_number: string
+          created_at?: string
+          features?: Json | null
+          id?: string
+          image_path: string
+          image_url: string
+          label?: string | null
+          mode?: string | null
+          notes?: string | null
+        }
+        Update: {
+          case_number?: string
+          created_at?: string
+          features?: Json | null
+          id?: string
+          image_path?: string
+          image_url?: string
+          label?: string | null
+          mode?: string | null
+          notes?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

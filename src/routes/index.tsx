@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { FEATURE_GROUPS, DEFAULTS, buildPrompt } from "@/lib/features";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -10,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
@@ -26,6 +28,9 @@ import {
   Crosshair,
   Send,
   Loader2,
+  Save,
+  FileText,
+  Trash2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -42,13 +47,24 @@ export const Route = createFileRoute("/")({
   }),
 });
 
-type HistoryItem = {
+type CaseRecord = {
   id: string;
-  image: string;
-  label: string;
-  mode: "sketch" | "realistic";
-  ts: number;
+  case_number: string;
+  notes: string | null;
+  image_url: string;
+  image_path: string;
+  label: string | null;
+  mode: string | null;
+  features: any;
+  created_at: string;
 };
+
+function genCaseNumber() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const rand = Math.floor(Math.random() * 1e6).toString().padStart(6, "0");
+  return `FS-${y}-${rand}`;
+}
 
 function App() {
   const [features, setFeatures] = useState<Record<string, string>>({ ...DEFAULTS });
@@ -58,9 +74,33 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [enhancePrompt, setEnhancePrompt] = useState("");
-  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [confidence, setConfidence] = useState<number>(0);
+  const [caseNumber, setCaseNumber] = useState<string>("");
+  const [caseNotes, setCaseNotes] = useState<string>("");
+  const [todayLabel, setTodayLabel] = useState<string>("");
+  const [cases, setCases] = useState<CaseRecord[]>([]);
+  const [saving, setSaving] = useState(false);
   const debounceRef = useRef<number | null>(null);
+
+  // Initialize client-only values to avoid SSR hydration mismatch
+  useEffect(() => {
+    setCaseNumber(genCaseNumber());
+    setTodayLabel(new Date().toLocaleDateString());
+    loadCases();
+  }, []);
+
+  const loadCases = async () => {
+    const { data, error } = await supabase
+      .from("forensic_cases")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(40);
+    if (error) {
+      console.error(error);
+      return;
+    }
+    setCases((data ?? []) as CaseRecord[]);
+  };
 
   const setFeature = (id: string, value: string) => {
     setFeatures((p) => ({ ...p, [id]: value }));
@@ -88,18 +128,6 @@ function App() {
         setProgress(100);
         const conf = 78 + Math.floor(Math.random() * 18);
         setConfidence(conf);
-        setHistory((h) =>
-          [
-            {
-              id: crypto.randomUUID(),
-              image: data.image,
-              label: overridePrompt ? "refinement" : mode,
-              mode,
-              ts: Date.now(),
-            },
-            ...h,
-          ].slice(0, 12),
-        );
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed to generate");
       } finally {
@@ -150,8 +178,67 @@ function App() {
     if (!image) return;
     const a = document.createElement("a");
     a.href = image;
-    a.download = `face-sketch-${Date.now()}.png`;
+    a.download = `${caseNumber || "face-sketch"}-${Date.now()}.png`;
     a.click();
+  };
+
+  const saveToCase = async () => {
+    if (!image) {
+      toast.error("Nothing to save");
+      return;
+    }
+    if (!caseNumber.trim()) {
+      toast.error("Enter a case number");
+      return;
+    }
+    setSaving(true);
+    try {
+      // Convert data URL to blob
+      const blob = await (await fetch(image)).blob();
+      const ext = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg";
+      const path = `${caseNumber}/${Date.now()}-${mode}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("case-files")
+        .upload(path, blob, { contentType: blob.type, upsert: false });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("case-files").getPublicUrl(path);
+      const { error: insErr } = await supabase.from("forensic_cases").insert({
+        case_number: caseNumber.trim(),
+        notes: caseNotes,
+        image_url: pub.publicUrl,
+        image_path: path,
+        label: mode,
+        mode,
+        features,
+      });
+      if (insErr) throw insErr;
+      toast.success(`Saved to case ${caseNumber}`);
+      loadCases();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteCase = async (c: CaseRecord) => {
+    try {
+      await supabase.storage.from("case-files").remove([c.image_path]);
+      await supabase.from("forensic_cases").delete().eq("id", c.id);
+      setCases((cs) => cs.filter((x) => x.id !== c.id));
+    } catch (e) {
+      toast.error("Failed to delete");
+    }
+  };
+
+  const loadCase = (c: CaseRecord) => {
+    setImage(c.image_url);
+    setCaseNumber(c.case_number);
+    setCaseNotes(c.notes ?? "");
+    if (c.features && typeof c.features === "object") {
+      setFeatures({ ...DEFAULTS, ...(c.features as any) });
+    }
+    if (c.mode === "realistic" || c.mode === "sketch") setMode(c.mode);
   };
 
   return (
@@ -179,8 +266,8 @@ function App() {
               <span className="h-2 w-2 rounded-full bg-emerald-400 pulse-dot" />
               SECURE LINK
             </span>
-            <span>CASE #{(Math.random() * 1e6).toFixed(0).padStart(6, "0")}</span>
-            <span>{new Date().toLocaleDateString()}</span>
+            <span>CASE #{caseNumber || "------"}</span>
+            <span suppressHydrationWarning>{todayLabel}</span>
           </div>
         </div>
       </header>
@@ -321,6 +408,14 @@ function App() {
               </Button>
               <Button
                 variant="outline"
+                disabled={!image || saving}
+                onClick={saveToCase}
+                className="font-mono text-xs border-[var(--neon)]/40"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />} SAVE TO CASE
+              </Button>
+              <Button
+                variant="outline"
                 disabled={!image}
                 onClick={downloadImage}
                 className="font-mono text-xs border-[var(--neon)]/40"
@@ -332,11 +427,41 @@ function App() {
                 onClick={() => {
                   setFeatures({ ...DEFAULTS });
                   setImage(null);
+                  setCaseNumber(genCaseNumber());
+                  setCaseNotes("");
                 }}
                 className="font-mono text-xs"
               >
-                <RefreshCw className="h-4 w-4 mr-1" /> RESET
+                <RefreshCw className="h-4 w-4 mr-1" /> NEW CASE
               </Button>
+            </div>
+          </div>
+
+          {/* Case file metadata */}
+          <div className="glass rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="h-4 w-4 text-[var(--neon)]" />
+              <h2 className="text-xs font-mono uppercase tracking-widest">Case File</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div className="md:col-span-1">
+                <label className="text-[10px] font-mono uppercase text-muted-foreground">Case Number</label>
+                <Input
+                  value={caseNumber}
+                  onChange={(e) => setCaseNumber(e.target.value)}
+                  placeholder="FS-2026-000123"
+                  className="bg-input/50 border-[var(--neon)]/20 font-mono text-xs"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-mono uppercase text-muted-foreground">Investigator Notes</label>
+                <Textarea
+                  value={caseNotes}
+                  onChange={(e) => setCaseNotes(e.target.value)}
+                  placeholder="Witness account, location, suspect description, distinguishing marks…"
+                  className="bg-input/50 border-[var(--neon)]/20 font-mono text-xs min-h-[60px]"
+                />
+              </div>
             </div>
           </div>
 
@@ -386,33 +511,47 @@ function App() {
           </div>
         </section>
 
-        {/* RIGHT — history */}
+        {/* RIGHT — saved case archive */}
         <aside className="col-span-12 lg:col-span-3 glass rounded-xl overflow-hidden">
           <div className="p-3 border-b flex items-center gap-2">
             <History className="h-4 w-4 text-[var(--neon)]" />
-            <h2 className="text-xs font-mono uppercase tracking-widest">
-              Investigation Variants
-            </h2>
+            <h2 className="text-xs font-mono uppercase tracking-widest">Case Archive</h2>
+            <span className="ml-auto text-[10px] font-mono text-muted-foreground">{cases.length}</span>
           </div>
           <ScrollArea className="h-[calc(100vh-180px)]">
-            <div className="p-3 grid grid-cols-2 gap-2">
-              {history.length === 0 && (
-                <div className="col-span-2 text-center text-[10px] font-mono text-muted-foreground py-8">
-                  NO VARIANTS YET
+            <div className="p-3 space-y-2">
+              {cases.length === 0 && (
+                <div className="text-center text-[10px] font-mono text-muted-foreground py-8">
+                  NO SAVED CASES
                 </div>
               )}
-              {history.map((h) => (
-                <button
-                  key={h.id}
-                  onClick={() => setImage(h.image)}
-                  className="relative group rounded overflow-hidden border border-[var(--neon)]/20 hover:border-[var(--neon)] transition"
+              {cases.map((c) => (
+                <div
+                  key={c.id}
+                  className="group rounded border border-[var(--neon)]/20 hover:border-[var(--neon)]/60 transition overflow-hidden bg-black/30"
                 >
-                  <img src={h.image} alt={h.label} className="w-full aspect-square object-cover" />
-                  <div className="absolute bottom-0 inset-x-0 bg-black/70 text-[9px] font-mono text-[var(--neon)] py-0.5 px-1 flex justify-between">
-                    <span className="uppercase">{h.label}</span>
-                    <span>{new Date(h.ts).toLocaleTimeString().slice(0, 5)}</span>
+                  <button onClick={() => loadCase(c)} className="block w-full">
+                    <img src={c.image_url} alt={c.case_number} className="w-full aspect-square object-cover" />
+                  </button>
+                  <div className="p-2 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-[var(--neon)] truncate">{c.case_number}</span>
+                      <button
+                        onClick={() => deleteCase(c)}
+                        className="opacity-0 group-hover:opacity-100 transition text-muted-foreground hover:text-red-400"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                    {c.notes && (
+                      <p className="text-[9px] font-mono text-muted-foreground line-clamp-2">{c.notes}</p>
+                    )}
+                    <div className="flex justify-between text-[9px] font-mono text-muted-foreground/70">
+                      <span className="uppercase">{c.label}</span>
+                      <span suppressHydrationWarning>{new Date(c.created_at).toLocaleDateString()}</span>
+                    </div>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           </ScrollArea>
