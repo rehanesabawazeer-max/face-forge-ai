@@ -126,6 +126,7 @@ function App() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Generation failed");
         setImage(data.image);
+        setSessionImages((s) => [{ id: `${Date.now()}`, url: data.image, mode, ts: Date.now() }, ...s].slice(0, 30));
         setProgress(100);
         const conf = 78 + Math.floor(Math.random() * 18);
         setConfidence(conf);
