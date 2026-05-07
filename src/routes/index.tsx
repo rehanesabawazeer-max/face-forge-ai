@@ -513,50 +513,84 @@ function App() {
           </div>
         </section>
 
-        {/* RIGHT — saved case archive */}
-        <aside className="col-span-12 lg:col-span-3 glass rounded-xl overflow-hidden">
-          <div className="p-3 border-b flex items-center gap-2">
-            <History className="h-4 w-4 text-[var(--neon)]" />
-            <h2 className="text-xs font-mono uppercase tracking-widest">Case Archive</h2>
-            <span className="ml-auto text-[10px] font-mono text-muted-foreground">{cases.length}</span>
-          </div>
-          <ScrollArea className="h-[calc(100vh-180px)]">
-            <div className="p-3 space-y-2">
-              {cases.length === 0 && (
-                <div className="text-center text-[10px] font-mono text-muted-foreground py-8">
-                  NO SAVED CASES
-                </div>
-              )}
-              {cases.map((c) => (
-                <div
-                  key={c.id}
-                  className="group rounded border border-[var(--neon)]/20 hover:border-[var(--neon)]/60 transition overflow-hidden bg-black/30"
-                >
-                  <button onClick={() => loadCase(c)} className="block w-full">
-                    <img src={c.image_url} alt={c.case_number} className="w-full aspect-square object-cover" />
-                  </button>
-                  <div className="p-2 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-mono text-[var(--neon)] truncate">{c.case_number}</span>
-                      <button
-                        onClick={() => deleteCase(c)}
-                        className="opacity-0 group-hover:opacity-100 transition text-muted-foreground hover:text-red-400"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                    {c.notes && (
-                      <p className="text-[9px] font-mono text-muted-foreground line-clamp-2">{c.notes}</p>
-                    )}
-                    <div className="flex justify-between text-[9px] font-mono text-muted-foreground/70">
-                      <span className="uppercase">{c.label}</span>
-                      <span suppressHydrationWarning>{new Date(c.created_at).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+        {/* RIGHT — recent generations + saved archive */}
+        <aside className="col-span-12 lg:col-span-3 glass rounded-xl overflow-hidden flex flex-col">
+          <Tabs defaultValue="recent" className="flex flex-col flex-1">
+            <div className="p-3 border-b flex items-center gap-2">
+              <History className="h-4 w-4 text-[var(--neon)]" />
+              <TabsList className="h-7">
+                <TabsTrigger value="recent" className="text-[10px] h-5 font-mono">Recent</TabsTrigger>
+                <TabsTrigger value="archive" className="text-[10px] h-5 font-mono">Old Sketches</TabsTrigger>
+              </TabsList>
             </div>
-          </ScrollArea>
+
+            <TabsContent value="recent" className="m-0 flex-1">
+              <ScrollArea className="h-[calc(100vh-180px)]">
+                <div className="p-3 space-y-2">
+                  {sessionImages.length === 0 && (
+                    <div className="text-center text-[10px] font-mono text-muted-foreground py-8">
+                      NO GENERATIONS YET
+                    </div>
+                  )}
+                  {sessionImages.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setImage(s.url)}
+                      className={`group block w-full rounded border transition overflow-hidden bg-black/30 ${
+                        image === s.url ? "border-[var(--neon)]" : "border-[var(--neon)]/20 hover:border-[var(--neon)]/60"
+                      }`}
+                    >
+                      <img src={s.url} alt="generation" className="w-full aspect-square object-cover" />
+                      <div className="p-1.5 flex justify-between text-[9px] font-mono text-muted-foreground">
+                        <span className="uppercase text-[var(--neon)]/80">{s.mode}</span>
+                        <span suppressHydrationWarning>{new Date(s.ts).toLocaleTimeString()}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
+            </TabsContent>
+
+            <TabsContent value="archive" className="m-0 flex-1">
+              <ScrollArea className="h-[calc(100vh-180px)]">
+                <div className="p-3 space-y-2">
+                  {cases.length === 0 && (
+                    <div className="text-center text-[10px] font-mono text-muted-foreground py-8">
+                      NO SAVED CASES
+                    </div>
+                  )}
+                  {cases.map((c) => (
+                    <div
+                      key={c.id}
+                      className="group rounded border border-[var(--neon)]/20 hover:border-[var(--neon)]/60 transition overflow-hidden bg-black/30"
+                    >
+                      <button onClick={() => loadCase(c)} className="block w-full">
+                        <img src={c.image_url} alt={c.case_number} className="w-full aspect-square object-cover" />
+                      </button>
+                      <div className="p-2 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-mono text-[var(--neon)] truncate">{c.case_number}</span>
+                          <button
+                            onClick={() => deleteCase(c)}
+                            className="opacity-0 group-hover:opacity-100 transition text-muted-foreground hover:text-red-400"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                        {c.notes && (
+                          <p className="text-[9px] font-mono text-muted-foreground line-clamp-2">{c.notes}</p>
+                        )}
+                        <div className="flex justify-between text-[9px] font-mono text-muted-foreground/70">
+                          <span className="uppercase">{c.label}</span>
+                          <span suppressHydrationWarning>{new Date(c.created_at).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </TabsContent>
+          </Tabs>
         </aside>
       </main>
     </div>
